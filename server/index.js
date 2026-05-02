@@ -8,11 +8,16 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 
-// 1. Initialize dotenv
-dotenv.config();
-
+// --- FIXED DOTENV INITIALIZATION ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// This tells the app to check the root (system1) OR the current folder (server) for .env
+const envPath = fs.existsSync(path.join(__dirname, '../.env')) 
+    ? path.join(__dirname, '../.env') 
+    : path.join(__dirname, '.env');
+
+dotenv.config({ path: envPath });
 
 const app = express();
 app.use(cors());
@@ -23,18 +28,20 @@ const JWT_SECRET = process.env.JWT_SECRET || 'kakanin_secret_key';
 
 // --- DEBUGGING: CHECK IF ENV VARIABLES ARE LOADED ---
 if (!process.env.DB_HOST) {
-    console.warn("WARNING: DB_HOST is not defined. Check your .env file.");
+    console.warn("WARNING: DB_HOST is not defined. Your .env file might be missing or in the wrong folder.");
+    console.log("Current looking for .env at:", envPath);
 }
 
 // --- DATABASE CONNECTION ---
-const db = mysql.createPool({ // Changed to 'createPool' for better reliability on Render/Aiven
+const db = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  port: process.env.DB_PORT || 26257, // Aiven typically uses 26257 for MySQL/MariaDB
+  // Use the port from .env, or fallback to 12590 which is common for Aiven MySQL
+  port: process.env.DB_PORT || 12590, 
   ssl: {
-    rejectUnauthorized: false // Necessary for Aiven if you aren't providing a CA cert file
+    rejectUnauthorized: false 
   },
   waitForConnections: true,
   connectionLimit: 10,
@@ -45,7 +52,6 @@ const db = mysql.createPool({ // Changed to 'createPool' for better reliability 
 db.getConnection((err, connection) => {
   if (err) {
     console.error('Error connecting to Aiven MySQL:', err.message);
-    console.error('Check if your IP is allowed in Aiven Console and if credentials are correct.');
     return;
   }
   console.log('Connected to Aiven MySQL Database successfully');
@@ -165,7 +171,6 @@ app.post('/api/reservations', authenticateToken, (req, res) => {
 });
 
 // --- FRONTEND INTEGRATION ---
-// Adjust path to point to your build folder
 app.use(express.static(path.join(__dirname, '../dist')));
 
 app.get(/^(?!\/api).+/, (req, res) => {
